@@ -40,3 +40,18 @@ Lancement de l'Application
 Assurez-vous de remplacer les URLs et les clés API par celles fournies par vos plateformes de trading. Ensuite, lancez le script :
 
 python forex_arbitrage.py
+
+Notes
+Sécurité :
+
+Ne stockez jamais les clés API en clair dans le code source. Utilisez des variables d'environnement ou un gestionnaire de secrets pour les protéger.
+Optimisation :
+
+Utilisez des bibliothèques de threading ou de multiprocessing pour améliorer les performances si vous surveillez de nombreuses paires de devises.
+Scalabilité :
+
+Envisagez d'utiliser des services de cloud computing pour exécuter votre bot d'arbitrage à grande échelle.
+Responsabilité :
+
+Assurez-vous de respecter les conditions d'utilisation des API et de suivre les réglementations locales concernant le trading algorithmique.
+Ce guide vous donne une base solide pour développer une application d'arbitrage Forex en Python. Vous pouvez l'étendre pour inclure plus de fonctionnalités et optimiser sa performance en fonction de vos besoins spécifiques.
