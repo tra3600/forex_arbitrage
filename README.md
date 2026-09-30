@@ -17,12 +17,23 @@ python -m unittest discover -s tests   # tests hors-ligne
 python forex_arbitrage.py --once                       # un cycle, sortie console
 python forex_arbitrage.py --pairs EURUSD,GBPUSD --interval 10 --fee-bps 1.5
 python forex_arbitrage.py --web --port 8000            # dashboard http://127.0.0.1:8000
+python forex_arbitrage.py --triangular --pairs EURUSD,GBPUSD,USDJPY   # + arbitrage triangulaire
 python forex_arbitrage.py --once --json                # état complet en JSON
 python forex_arbitrage.py --log-file opportunites.jsonl
 ```
 
 Options aussi disponibles en variables d'environnement : `FX_PAIRS`, `FX_PROVIDERS`, `FX_INTERVAL`, `FX_FEE_BPS`,
 `FX_MIN_NET_BPS`, `FX_MAX_AGE`. Le tableau de bord expose `/` (HTML), `/api/state` (JSON) et `/health`.
+
+## Arbitrage triangulaire
+
+Avec `--triangular`, les paires croisées entre les devises citées sont ajoutées automatiquement (EURUSD, GBPUSD,
+USDJPY → + EURGBP, EURJPY, GBPJPY). Pour chaque triplet de devises, le programme teste les deux sens
+A → B → C → A avec, pour chaque jambe, le meilleur prix exécutable parmi toutes les sources (bid le plus haut pour
+vendre, ask le plus bas pour acheter). Le coût est de 3 × `--tri-leg-fee-bps` (0,5 bps par défaut).
+Les opportunités apparaissent dans les logs, le JSONL (`"type": "triangular"`), `/api/state` et le dashboard.
+Avec des cours milieu issus d'une même table, le produit des taux vaut 1 : les opportunités viennent surtout de
+l'écart entre sources ou d'un vrai bid/ask (alphavantage, `generic`) et sont souvent des écarts de fraîcheur.
 
 ## Fournisseurs (API web)
 

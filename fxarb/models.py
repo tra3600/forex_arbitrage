@@ -62,3 +62,32 @@ class Opportunity:
 
     def to_dict(self) -> dict:
         return asdict(self)
+
+
+MAJOR_ORDER = ["EUR", "GBP", "AUD", "NZD", "USD", "CAD", "CHF", "JPY"]
+
+
+def canonical_pair(a: str, b: str) -> str:
+    """Orientation conventionnelle du marché (EURUSD, USDJPY, GBPJPY...)."""
+    def rank(c):
+        return MAJOR_ORDER.index(c) if c in MAJOR_ORDER else len(MAJOR_ORDER)
+    a, b = sorted((a, b), key=lambda c: (rank(c), c))
+    return a + b
+
+
+@dataclass
+class TriangularOpportunity:
+    path: list          # ex. ["EUR", "USD", "GBP", "EUR"]
+    legs: list          # [{"pair","action","provider","price","rate"}] ; rate = taux de conversion effectif
+    gross_bps: float
+    net_bps: float
+    timestamp: float = field(default_factory=time.time)
+
+    def describe(self) -> str:
+        steps = " -> ".join(
+            f"{l['action']} {l['pair']} @ {l['price']:.5f} ({l['provider']})" for l in self.legs)
+        return (f"{'>'.join(self.path)} : {steps} "
+                f"(brut {self.gross_bps:.2f} bps, net {self.net_bps:.2f} bps)")
+
+    def to_dict(self) -> dict:
+        return asdict(self)

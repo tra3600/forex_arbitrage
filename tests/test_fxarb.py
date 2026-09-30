@@ -10,7 +10,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from fxarb import providers as P
-from fxarb.engine import Engine, find_opportunity
+from fxarb.engine import Engine, expand_triangular_pairs, find_opportunity, find_triangular
 from fxarb.models import Quote, normalize_pair
 from fxarb.web import make_server
 
@@ -73,6 +73,49 @@ class TestEngineLogic(unittest.TestCase):
 
     def test_single_provider(self):
         self.assertIsNone(find_opportunity("EURUSD", [self.q("a", 1.1, 1.1)]))
+
+
+class TestTriangular(unittest.TestCase):
+    def qs(self, **rates):
+        return {p: [Quote("x", p, r, r)] for p, r in rates.items()}
+
+    def test_consistent_rates_no_opportunity(self):
+        self.assertEqual(find_triangular(self.qs(EURUSD=1.10, GBPUSD=1.25, EURGBP=1.10 / 1.25)), [])
+
+    def test_detects_cycle_and_direction(self):
+        # EURGBP trop cher : EUR->USD->GBP->EUR (vendre EURUSD, acheter GBPUSD, vendre EURGBP)
+        res = find_triangular(self.qs(EURUSD=1.10, GBPUSD=1.25, EURGBP=0.90))
+        self.assertEqual(len(res), 1)
+        o = res[0]
+        prod = 1.0
+        for l in o.legs:
+            prod *= l["rate"]
+        self.assertAlmostEqual(o.gross_bps, (prod - 1) * 1e4)
+        self.assertGreater(o.net_bps, 0)
+        self.assertEqual(o.path[0], o.path[-1])
+        self.assertEqual(sorted(o.path[:3]), ["EUR", "GBP", "USD"])
+
+    def test_fees_and_bid_ask(self):
+        q = self.qs(EURUSD=1.10, GBPUSD=1.25, EURGBP=0.8850)
+        gross = find_triangular(q, 0)[0].gross_bps
+        self.assertIsNone(next(iter(find_triangular(q, gross)), None))  # 3*fee > gross
+        # spread bid/ask détruit l'opportunité
+        wide = {p: [Quote("x", p, r * 0.997, r * 1.003)] for p, r in dict(EURUSD=1.10, GBPUSD=1.25, EURGBP=0.8850).items()}
+        self.assertEqual(find_triangular(wide), [])
+
+    def test_best_leg_across_providers(self):
+        q = self.qs(EURUSD=1.10, GBPUSD=1.25, EURGBP=1.10 / 1.25)
+        q["EURGBP"].append(Quote("y", "EURGBP", 0.885, 0.886))  # meilleur bid chez y
+        res = find_triangular(q)
+        self.assertEqual(len(res), 1)
+        self.assertIn("y", [l["provider"] for l in res[0].legs])
+
+    def test_missing_leg(self):
+        self.assertEqual(find_triangular(self.qs(EURUSD=1.1, GBPUSD=1.25)), [])
+
+    def test_expand_pairs(self):
+        self.assertEqual(set(expand_triangular_pairs(["EURUSD", "USDJPY"])),
+                         {"EURUSD", "USDJPY", "EURJPY"})
 
 
 class TestProviders(Base):
@@ -149,6 +192,8 @@ class TestEndToEnd(Base):
         self.assertEqual(len(opps), 1)
         self.assertEqual((opps[0].buy_provider, opps[0].sell_provider), ("A", "B"))
 
+        eng_t = Engine([a, b], ["EURUSD"], triangular=True)
+        self.assertEqual(eng_t.pairs, ["EURUSD"])  # 2 devises : pas de croisée
         srv = make_server(eng, port=0)
         threading.Thread(target=srv.serve_forever, daemon=True).start()
         base = f"http://127.0.0.1:{srv.server_address[1]}"

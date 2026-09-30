@@ -13,7 +13,7 @@ PAGE = """<!doctype html><html lang="fr"><head><meta charset="utf-8">
 table{border-collapse:collapse;width:100%;margin:.5rem 0 1.5rem}td,th{border:1px solid #8884;padding:.35rem .6rem;text-align:right}
 th:first-child,td:first-child{text-align:left}.opp{background:#2a92;font-weight:600}.err{color:#c33}small{opacity:.7}</style></head>
 <body><h1>Forex Arbitrage</h1><small id=meta>chargement…</small>
-<h2>Opportunités</h2><table id=opps></table><h2>Cotations</h2><table id=quotes></table>
+<h2>Opportunités</h2><table id=opps></table><h2>Triangulaire</h2><table id=tri></table><h2>Cotations</h2><table id=quotes></table>
 <h2>Erreurs</h2><div id=errs class=err></div><h2>Historique</h2><table id=hist></table>
 <script>
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -23,6 +23,8 @@ async function tick(){try{const s=await (await fetch('api/state')).json();
 meta.textContent=s.updated?`cycle ${s.cycles} · maj ${t(s.updated)} · frais ${s.params.fee_bps} bps · seuil ${s.params.min_net_bps} bps`:'en attente du 1er cycle…';
 const O=s.opportunities||[];opps.innerHTML=O.length?rows(['Paire','Achat','Prix','Vente','Prix','Brut bps','Net bps'],
 O.map(o=>`<tr class=opp><td>${esc(o.pair)}</td><td>${esc(o.buy_provider)}</td><td>${o.buy_price.toFixed(5)}</td><td>${esc(o.sell_provider)}</td><td>${o.sell_price.toFixed(5)}</td><td>${o.gross_bps.toFixed(2)}</td><td>${o.net_bps.toFixed(2)}</td></tr>`)):'<tr><td>Aucune opportunité</td></tr>';
+const T=s.triangular||[];tri.innerHTML=(s.params&&s.params.triangular)?(T.length?rows(['Cycle','Jambes','Brut bps','Net bps'],
+T.map(o=>`<tr class=opp><td>${esc(o.path.join('→'))}</td><td>${o.legs.map(l=>esc(l.action+' '+l.pair+' @'+l.price.toFixed(5)+' ('+l.provider+')')).join(' ; ')}</td><td>${o.gross_bps.toFixed(2)}</td><td>${o.net_bps.toFixed(2)}</td></tr>`)):'<tr><td>Aucun cycle rentable</td></tr>'):'<tr><td>Désactivé (--triangular)</td></tr>';
 const Q=[];for(const [p,qs] of Object.entries(s.quotes||{}))for(const q of qs)Q.push(`<tr><td>${esc(p)}</td><td>${esc(q.provider)}</td><td>${q.bid.toFixed(5)}</td><td>${q.ask.toFixed(5)}</td><td>${t(q.timestamp)}</td></tr>`);
 quotes.innerHTML=rows(['Paire','Source','Bid','Ask','Heure'],Q);
 errs.textContent=Object.entries(s.errors||{}).map(([k,v])=>k+': '+v).join(' | ');

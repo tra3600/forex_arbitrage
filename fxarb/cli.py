@@ -33,6 +33,10 @@ def parse_args(argv=None):
                    help="écart net minimal pour signaler une opportunité")
     p.add_argument("--max-age", type=float, default=env_float("FX_MAX_AGE", 300),
                    help="ignore les cotations plus vieilles que N secondes")
+    p.add_argument("--triangular", action="store_true",
+                   help="active l'arbitrage triangulaire (ajoute automatiquement les paires croisées)")
+    p.add_argument("--tri-leg-fee-bps", type=float, default=env_float("FX_TRI_LEG_FEE_BPS", 0.5),
+                   help="coût par jambe (3 jambes par cycle) en bps (défaut: %(default)s)")
     p.add_argument("--timeout", type=float, default=8.0, help="timeout HTTP (s)")
     p.add_argument("--once", action="store_true", help="un seul cycle puis quitte")
     p.add_argument("--json", action="store_true", help="affiche l'état complet en JSON (avec --once)")
@@ -51,7 +55,8 @@ def main(argv=None) -> int:
     try:
         providers = build_providers([n for n in a.providers.split(",") if n.strip()], timeout=a.timeout)
         engine = Engine(providers, [x for x in a.pairs.split(",") if x.strip()],
-                        fee_bps=a.fee_bps, min_net_bps=a.min_net_bps, max_age=a.max_age)
+                        fee_bps=a.fee_bps, min_net_bps=a.min_net_bps, max_age=a.max_age,
+                        triangular=a.triangular, tri_leg_fee_bps=a.tri_leg_fee_bps)
     except ValueError as e:
         print(f"Erreur de configuration : {e}", file=sys.stderr)
         return 2
@@ -80,6 +85,11 @@ def main(argv=None) -> int:
             if a.log_file:
                 with open(a.log_file, "a", encoding="utf-8") as f:
                     f.write(json.dumps(o.to_dict()) + "\n")
+        for t in engine.last_triangular:
+            log.info("TRIANGULAIRE %s", t.describe())
+            if a.log_file:
+                with open(a.log_file, "a", encoding="utf-8") as f:
+                    f.write(json.dumps({"type": "triangular", **t.to_dict()}) + "\n")
         if not opps:
             log.info("Pas d'opportunité au-dessus des frais (%.1f bps).", a.fee_bps)
         if a.once:
