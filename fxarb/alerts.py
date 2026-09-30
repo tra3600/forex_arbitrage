@@ -65,6 +65,38 @@ class InstagramNotifier:
             raise AlertError(f"Instagram: HTTP {r.status_code} {msg}".strip())
 
 
+class TelegramNotifier:
+    """Bot Telegram : créer un bot avec @BotFather (jeton), écrire au bot, puis récupérer son chat_id
+    (getUpdates). Pas de fenêtre de 24 h ni de compte pro requis."""
+    name = "telegram"
+    MAX_CHARS = 4096
+
+    def __init__(self, token: str | None = None, chat_id: str | None = None, timeout: float = 10.0,
+                 base_url: str = "https://api.telegram.org", session: requests.Session | None = None):
+        self.token = token or os.environ.get("TELEGRAM_BOT_TOKEN")
+        self.chat_id = chat_id or os.environ.get("TELEGRAM_CHAT_ID")
+        if not self.token or not self.chat_id:
+            raise AlertError("Telegram: définir TELEGRAM_BOT_TOKEN et TELEGRAM_CHAT_ID")
+        self.timeout = timeout
+        self.base_url = base_url.rstrip("/")
+        self.session = session or requests.Session()
+
+    def send(self, text: str) -> None:
+        url = f"{self.base_url}/bot{self.token}/sendMessage"  # le jeton est dans l'URL : ne jamais la loguer
+        try:
+            r = self.session.post(url, timeout=self.timeout,
+                                  json={"chat_id": self.chat_id, "text": text[:self.MAX_CHARS],
+                                        "disable_web_page_preview": True})
+        except requests.RequestException as e:
+            raise AlertError(f"Telegram: erreur réseau ({e.__class__.__name__})") from e
+        if r.status_code != 200:
+            try:
+                msg = r.json().get("description", "")
+            except ValueError:
+                msg = ""
+            raise AlertError(f"Telegram: HTTP {r.status_code} {msg}".strip())
+
+
 def format_opportunity(o) -> str:
     kind = "Arbitrage triangulaire" if isinstance(o, TriangularOpportunity) else "Arbitrage Forex"
     return f"{kind} - {o.describe()}"

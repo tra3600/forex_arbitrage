@@ -9,7 +9,7 @@ import sys
 import threading
 import time
 
-from .alerts import AlertError, AlertManager, InstagramNotifier
+from .alerts import AlertError, AlertManager, InstagramNotifier, TelegramNotifier
 from .engine import Engine
 from .providers import DEFAULT_PROVIDERS, PROVIDERS, build_providers
 from .web import serve_in_thread
@@ -40,6 +40,8 @@ def parse_args(argv=None):
                    help="coût par jambe (3 jambes par cycle) en bps (défaut: %(default)s)")
     p.add_argument("--alert-instagram", action="store_true",
                    help="envoie les opportunités par DM Instagram (INSTAGRAM_ACCESS_TOKEN, INSTAGRAM_RECIPIENT_ID)")
+    p.add_argument("--alert-telegram", action="store_true",
+                   help="envoie les opportunités via un bot Telegram (TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID)")
     p.add_argument("--alert-cooldown", type=float, default=env_float("FX_ALERT_COOLDOWN", 300),
                    help="secondes avant de renvoyer la même alerte (défaut: %(default)s)")
     p.add_argument("--alert-min-bps", type=float, default=env_float("FX_ALERT_MIN_BPS", 0.0),
@@ -68,9 +70,11 @@ def main(argv=None) -> int:
         print(f"Erreur de configuration : {e}", file=sys.stderr)
         return 2
     alerts = None
-    if a.alert_instagram:
+    if a.alert_instagram or a.alert_telegram:
         try:
-            alerts = AlertManager([InstagramNotifier()], a.alert_cooldown, a.alert_min_bps)
+            notifiers = ([InstagramNotifier()] if a.alert_instagram else []) + \
+                        ([TelegramNotifier()] if a.alert_telegram else [])
+            alerts = AlertManager(notifiers, a.alert_cooldown, a.alert_min_bps)
         except AlertError as e:
             print(f"Erreur de configuration : {e}", file=sys.stderr)
             return 2

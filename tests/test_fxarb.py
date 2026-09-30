@@ -10,7 +10,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from fxarb import providers as P
-from fxarb.alerts import AlertError, AlertManager, InstagramNotifier, format_opportunity
+from fxarb.alerts import AlertError, AlertManager, InstagramNotifier, TelegramNotifier, format_opportunity
 from fxarb.models import Opportunity
 from fxarb.engine import Engine, expand_triangular_pairs, find_opportunity, find_triangular
 from fxarb.models import Quote, normalize_pair
@@ -161,6 +161,21 @@ class TestAlerts(Base):
         with self.assertRaises(AlertError) as cm:
             n.send("x")
         self.assertIn("bad recipient", str(cm.exception))
+        self.assertNotIn("SECRET", str(cm.exception))
+
+    def test_telegram(self):
+        os.environ.pop("TELEGRAM_BOT_TOKEN", None)
+        with self.assertRaises(AlertError):
+            TelegramNotifier()
+        n = TelegramNotifier("123:SECRET", "42", base_url=self.url)
+        ROUTES["/bot123:SECRET/sendMessage"] = (200, {"ok": True})
+        n.send("hello")
+        self.assertEqual(H.last_post["body"]["chat_id"], "42")
+        self.assertEqual(H.last_post["body"]["text"], "hello")
+        ROUTES["/bot123:SECRET/sendMessage"] = (401, {"ok": False, "description": "Unauthorized"})
+        with self.assertRaises(AlertError) as cm:
+            n.send("x")
+        self.assertIn("Unauthorized", str(cm.exception))
         self.assertNotIn("SECRET", str(cm.exception))
 
     def test_truncate(self):

@@ -50,6 +50,19 @@ d'envoi est loguée sans arrêter le programme. Anti-spam : la même opportunit�
 **professionnel** lié à une app Meta (permission `instagram_business_manage_messages`), et le destinataire doit avoir
 écrit au compte dans les dernières 24 h, sinon l'API refuse l'envoi. `INSTAGRAM_API_VERSION` (défaut `v21.0`) est réglable.
 
+## Alertes Telegram
+
+Plus simple qu'Instagram : pas de compte pro ni de fenêtre de 24 h. Créez un bot avec @BotFather, écrivez-lui un
+message, puis récupérez votre `chat_id` (`https://api.telegram.org/bot<TOKEN>/getUpdates`).
+
+```bash
+export TELEGRAM_BOT_TOKEN=...   # jeton donné par @BotFather
+export TELEGRAM_CHAT_ID=...
+python forex_arbitrage.py --triangular --alert-telegram              # combinable avec --alert-instagram
+```
+
+Mêmes options anti-spam que pour Instagram (`--alert-cooldown`, `--alert-min-bps`).
+
 ## Fournisseurs (API web)
 
 | Nom | Clé | Remarque |
