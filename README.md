@@ -1,57 +1,50 @@
 # forex_arbitrage
-application d'arbitrage sur le marché Forex (Foreign Exchange)
 
-Développer une application d'arbitrage sur le marché Forex (Foreign Exchange) implique de surveiller les prix de différentes paires de devises sur plusieurs plateformes de trading pour identifier des opportunités d'arbitrage. Voici un guide pour créer une application de base en Python qui surveille les prix sur deux plateformes et effectue un arbitrage si une opportunité est détectée.
+Détecteur d'arbitrage Forex : il interroge en parallèle plusieurs sources de cotations sur le web, compare les prix
+(acheter à l'ask le plus bas, vendre au bid le plus haut), retranche les frais et signale les opportunités.
+**Lecture seule : aucun ordre n'est passé.** Un tableau de bord web optionnel est inclus.
 
-Étapes
-Installer les bibliothèques nécessaires.
-Créer des fonctions pour récupérer les taux de change des plateformes.
-Implémenter la logique d'arbitrage.
-Configurer l'exécution périodique de l'arbitrage.
-Prérequis
-API d'accès aux données Forex : Vous aurez besoin d'accéder aux API de deux plateformes de trading Forex. Pour cet exemple, nous utiliserons des API fictives.
-Python : Assurez-vous d'avoir Python installé sur votre machine.
-Installation des Bibliothèques Nécessaires
+## Installation
 
-pip install requests schedule
+```bash
+pip install -r requirements.txt   # seule dépendance : requests
+python -m unittest discover -s tests   # tests hors-ligne
+```
 
-Configuration des API (fictives)
-Vous devrez remplacer les URLs et les clés API par celles fournies par les plateformes de trading que vous utilisez.
+## Utilisation
 
-Explications
-Importation des Bibliothèques :
+```bash
+python forex_arbitrage.py --once                       # un cycle, sortie console
+python forex_arbitrage.py --pairs EURUSD,GBPUSD --interval 10 --fee-bps 1.5
+python forex_arbitrage.py --web --port 8000            # dashboard http://127.0.0.1:8000
+python forex_arbitrage.py --once --json                # état complet en JSON
+python forex_arbitrage.py --log-file opportunites.jsonl
+```
 
-requests : Pour effectuer des requêtes HTTP aux API des plateformes.
-schedule : Pour exécuter périodiquement la logique d'arbitrage.
-time : Pour gérer les intervalles de temps entre les exécutions.
-Configuration des API :
+Options aussi disponibles en variables d'environnement : `FX_PAIRS`, `FX_PROVIDERS`, `FX_INTERVAL`, `FX_FEE_BPS`,
+`FX_MIN_NET_BPS`, `FX_MAX_AGE`. Le tableau de bord expose `/` (HTML), `/api/state` (JSON) et `/health`.
 
-Définir les URLs des API et les clés d'API pour accéder aux données des plateformes.
-Récupération des Taux de Change :
+## Fournisseurs (API web)
 
-get_exchange_rate : Fonction pour obtenir le taux de change d'une paire de devises spécifique à partir d'une plateforme.
-Logique d'Arbitrage :
+| Nom | Clé | Remarque |
+|---|---|---|
+| `erapi` | non | open.er-api.com, mid |
+| `fawaz` | non | currency-api sur CDN jsDelivr + miroir de secours, mid |
+| `yahoo` | non | endpoint Yahoo Finance non officiel, quasi temps réel, mid |
+| `frankfurter` | non | taux BCE, 1 fois par jour : référence, pas du temps réel |
+| `exchangerateapi` | `EXCHANGERATE_API_KEY` | v6.exchangerate-api.com |
+| `twelvedata` | `TWELVEDATA_API_KEY` | mid |
+| `alphavantage` | `ALPHAVANTAGE_API_KEY` | fournit bid et ask (25 req/jour en gratuit) |
+| `generic` | `FX_GENERIC_URL`, `FX_GENERIC_KEY` | ancien format : `GET {url}/EURUSD`, Bearer, JSON `{"rate": x}` ou `{"bid","ask"}` |
 
-arbitrage_opportunity : Fonction qui compare les taux de change entre les plateformes et imprime une opportunité d'arbitrage si elle est détectée.
-Exécution Périodique :
+Les fournisseurs sans clé sont ignorés avec un avertissement ; une panne réseau, un HTTP non 200 ou un JSON invalide
+sur une source n'arrête pas les autres (timeouts, retries avec backoff sur 429/5xx).
+Ajouter une source : sous-classer `Provider` (ou `TableProvider`) dans `fxarb/providers.py` et l'enregistrer dans `PROVIDERS`.
 
-schedule.every(10).seconds.do(arbitrage_opportunity) : Configure l'exécution de la fonction arbitrage_opportunity toutes les 10 secondes.
-Lancement de l'Application
-Assurez-vous de remplacer les URLs et les clés API par celles fournies par vos plateformes de trading. Ensuite, lancez le script :
+## À savoir avant de trader
 
-python forex_arbitrage.py
-
-Notes
-Sécurité :
-
-Ne stockez jamais les clés API en clair dans le code source. Utilisez des variables d'environnement ou un gestionnaire de secrets pour les protéger.
-Optimisation :
-
-Utilisez des bibliothèques de threading ou de multiprocessing pour améliorer les performances si vous surveillez de nombreuses paires de devises.
-Scalabilité :
-
-Envisagez d'utiliser des services de cloud computing pour exécuter votre bot d'arbitrage à grande échelle.
-Responsabilité :
-
-Assurez-vous de respecter les conditions d'utilisation des API et de suivre les réglementations locales concernant le trading algorithmique.
-Ce guide vous donne une base solide pour développer une application d'arbitrage Forex en Python. Vous pouvez l'étendre pour inclure plus de fonctionnalités et optimiser sa performance en fonction de vos besoins spécifiques.
+- La plupart des API gratuites ne donnent qu'un cours milieu et sont agrégées/retardées : un écart entre deux d'entre
+  elles est souvent un écart de fraîcheur, pas une vraie opportunité exécutable. Réglez `--fee-bps` (spread, commission,
+  slippage) de façon réaliste.
+- Les clés API se passent par variables d'environnement, jamais dans le code.
+- Respectez les conditions d'utilisation des API (quotas) et la réglementation locale du trading algorithmique.
