@@ -9,6 +9,7 @@ import sys
 import threading
 import time
 
+from .alerts import AlertError, AlertManager, InstagramNotifier
 from .engine import Engine
 from .providers import DEFAULT_PROVIDERS, PROVIDERS, build_providers
 from .web import serve_in_thread
@@ -37,6 +38,12 @@ def parse_args(argv=None):
                    help="active l'arbitrage triangulaire (ajoute automatiquement les paires croisées)")
     p.add_argument("--tri-leg-fee-bps", type=float, default=env_float("FX_TRI_LEG_FEE_BPS", 0.5),
                    help="coût par jambe (3 jambes par cycle) en bps (défaut: %(default)s)")
+    p.add_argument("--alert-instagram", action="store_true",
+                   help="envoie les opportunités par DM Instagram (INSTAGRAM_ACCESS_TOKEN, INSTAGRAM_RECIPIENT_ID)")
+    p.add_argument("--alert-cooldown", type=float, default=env_float("FX_ALERT_COOLDOWN", 300),
+                   help="secondes avant de renvoyer la même alerte (défaut: %(default)s)")
+    p.add_argument("--alert-min-bps", type=float, default=env_float("FX_ALERT_MIN_BPS", 0.0),
+                   help="écart net minimal pour alerter (défaut: %(default)s)")
     p.add_argument("--timeout", type=float, default=8.0, help="timeout HTTP (s)")
     p.add_argument("--once", action="store_true", help="un seul cycle puis quitte")
     p.add_argument("--json", action="store_true", help="affiche l'état complet en JSON (avec --once)")
@@ -60,6 +67,13 @@ def main(argv=None) -> int:
     except ValueError as e:
         print(f"Erreur de configuration : {e}", file=sys.stderr)
         return 2
+    alerts = None
+    if a.alert_instagram:
+        try:
+            alerts = AlertManager([InstagramNotifier()], a.alert_cooldown, a.alert_min_bps)
+        except AlertError as e:
+            print(f"Erreur de configuration : {e}", file=sys.stderr)
+            return 2
     if len(providers) < 2:
         log.warning("Moins de 2 fournisseurs utilisables : aucun arbitrage possible.")
 
@@ -90,12 +104,18 @@ def main(argv=None) -> int:
             if a.log_file:
                 with open(a.log_file, "a", encoding="utf-8") as f:
                     f.write(json.dumps({"type": "triangular", **t.to_dict()}) + "\n")
+        if alerts:
+            alerts.notify(list(opps) + list(engine.last_triangular))
         if not opps:
             log.info("Pas d'opportunité au-dessus des frais (%.1f bps).", a.fee_bps)
         if a.once:
+            if alerts:
+                alerts.close()
             if a.json:
                 print(json.dumps(snap, indent=2))
             return 0 if snap["quotes"] and any(snap["quotes"].values()) else 1
         stop.wait(max(0.0, a.interval - (time.time() - t0)))
+    if alerts:
+        alerts.close()
     log.info("Arrêt.")
     return 0

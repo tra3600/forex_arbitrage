@@ -35,6 +35,21 @@ Les opportunités apparaissent dans les logs, le JSONL (`"type": "triangular"`),
 Avec des cours milieu issus d'une même table, le produit des taux vaut 1 : les opportunités viennent surtout de
 l'écart entre sources ou d'un vrai bid/ask (alphavantage, `generic`) et sont souvent des écarts de fraîcheur.
 
+## Alertes Instagram
+
+```bash
+export INSTAGRAM_ACCESS_TOKEN=...   # jeton de l'API Instagram (jamais dans le code ni dans git)
+export INSTAGRAM_RECIPIENT_ID=...   # IGSID du destinataire
+python forex_arbitrage.py --triangular --alert-instagram --alert-min-bps 3 --alert-cooldown 300
+```
+
+Chaque opportunité (directe ou triangulaire) est envoyée en message direct via l'API officielle Instagram Messaging
+(`POST graph.instagram.com/{version}/me/messages`), en tâche de fond pour ne pas ralentir les cycles ; une erreur
+d'envoi est loguée sans arrêter le programme. Anti-spam : la même opportunité n'est renvoyée qu'après
+`--alert-cooldown` s, sauf si l'écart net grossit de 50 %. Contraintes imposées par Meta : compte Instagram
+**professionnel** lié à une app Meta (permission `instagram_business_manage_messages`), et le destinataire doit avoir
+écrit au compte dans les dernières 24 h, sinon l'API refuse l'envoi. `INSTAGRAM_API_VERSION` (défaut `v21.0`) est réglable.
+
 ## Fournisseurs (API web)
 
 | Nom | Clé | Remarque |

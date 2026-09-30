@@ -10,6 +10,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from fxarb import providers as P
+from fxarb.alerts import AlertError, AlertManager, InstagramNotifier, format_opportunity
+from fxarb.models import Opportunity
 from fxarb.engine import Engine, expand_triangular_pairs, find_opportunity, find_triangular
 from fxarb.models import Quote, normalize_pair
 from fxarb.web import make_server
@@ -25,6 +27,17 @@ class H(BaseHTTPRequestHandler):
             data = json.dumps(body).encode()
         else:
             code, data = 404, b"{}"
+        self.send_response(code)
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def do_POST(self):
+        n = int(self.headers.get("Content-Length", 0))
+        H.last_post = {"path": self.path, "auth": self.headers.get("Authorization"),
+                       "body": json.loads(self.rfile.read(n) or b"{}")}
+        code, body = ROUTES.get(self.path, (404, {}))
+        data = json.dumps(body).encode()
         self.send_response(code)
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
@@ -116,6 +129,59 @@ class TestTriangular(unittest.TestCase):
     def test_expand_pairs(self):
         self.assertEqual(set(expand_triangular_pairs(["EURUSD", "USDJPY"])),
                          {"EURUSD", "USDJPY", "EURJPY"})
+
+
+POSTS = []
+
+
+class TestAlerts(Base):
+    def setUp(self):
+        super().setUp()
+        POSTS.clear()
+
+    def opp(self, net=5.0, buy="a"):
+        return Opportunity("EURUSD", buy, 1.1, "b", 1.101, net + 1, net)
+
+    def test_missing_config(self):
+        os.environ.pop("INSTAGRAM_ACCESS_TOKEN", None)
+        with self.assertRaises(AlertError):
+            InstagramNotifier()
+
+    def test_send_payload(self):
+        n = InstagramNotifier("TOK", "123", base_url=self.url)
+        ROUTES["/v21.0/me/messages"] = (200, {"message_id": "m"})
+        n.send("salut")
+        self.assertEqual(H.last_post["path"], "/v21.0/me/messages")
+        self.assertEqual(H.last_post["auth"], "Bearer TOK")
+        self.assertEqual(H.last_post["body"], {"recipient": {"id": "123"}, "message": {"text": "salut"}})
+
+    def test_http_error_no_token_leak(self):
+        n = InstagramNotifier("SECRET", "123", base_url=self.url)
+        ROUTES["/v21.0/me/messages"] = (400, {"error": {"message": "bad recipient"}})
+        with self.assertRaises(AlertError) as cm:
+            n.send("x")
+        self.assertIn("bad recipient", str(cm.exception))
+        self.assertNotIn("SECRET", str(cm.exception))
+
+    def test_truncate(self):
+        self.assertLessEqual(len(InstagramNotifier._truncate("é" * 2000).encode()), 1000)
+
+    def test_cooldown_and_threshold(self):
+        m = AlertManager([], cooldown=100, min_net_bps=2)
+        self.assertFalse(m.should_send(self.opp(1.0), now=0))
+        self.assertTrue(m.should_send(self.opp(5.0), now=0))
+        self.assertFalse(m.should_send(self.opp(5.5), now=10))
+        self.assertTrue(m.should_send(self.opp(9.0), now=20))    # écart x1,5
+        self.assertTrue(m.should_send(self.opp(9.0), now=500))   # cooldown écoulé
+        self.assertTrue(m.should_send(self.opp(5.0, buy="c"), now=10))  # autre opportunité
+
+    def test_manager_sends(self):
+        ROUTES["/v21.0/me/messages"] = (200, {})
+        m = AlertManager([InstagramNotifier("T", "1", base_url=self.url)])
+        self.assertEqual(m.notify([self.opp()]), 1)
+        self.assertEqual(m.notify([self.opp()]), 0)
+        m.close()
+        self.assertIn("EURUSD", H.last_post["body"]["message"]["text"])
 
 
 class TestProviders(Base):
